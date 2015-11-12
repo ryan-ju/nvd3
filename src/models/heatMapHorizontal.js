@@ -17,11 +17,17 @@ nv.models.heatMapHorizontal = function() {
     // Chart Specific Settings
     var
     // Int.
-        cellSize = 17
+        cellSize = 12
+    // Int.  The number of cells per column.
         , numCellsPerColumn = 12
+    // Array.  The size should be equal to numCellsPerColumn.
         , rowNames = d3.range(0, 12).map(function(i) { return 'row' + i; })
+    // Array.  Should be equal to the range of groupDivider.
+        , groupNames = d3.range(0, 10).map(function(i) { return 'group' + i; })
+    // Array.  Should be equal to the range of chartDivider.
+        , chartNames = d3.range(0, 2).map(function(i) { return 'chart' + i; })
     // function(dataItem): Int.  E.g., for a heat map with each cell being a day, cellHorizontalIndex can return the week of the year.
-        , cellHorizontalIndex = function(d) { return Math.floor(d / 12) % Math.floor(500 / 12); }
+        , cellHorizontalIndex = function(d) { return Math.floor(d / 12) - Math.floor(Math.floor(d / 500) * 500 / 12); }
     // function(dataItem): Int.  E.g., for a heat map with each cell being a day, cellVerticalIndex with range [0..6] makes each column a week.
         , cellVerticalIndex = function(d) { return d % 12; }
     // Array.  Used to get values from data.
@@ -80,22 +86,33 @@ nv.models.heatMapHorizontal = function() {
                 .enter()
                 .append('g')
                 .attr('class', 'nv-heatMapChart')
-                .attr('transform', function(d, i) { return 'translate(0,' + (i * (numCellsPerColumn * cellSize + margin.bottom)) + ')'; });
+                .attr('transform', function(d, i) { return 'translate(0,' + (i * (numCellsPerColumn + 2) * cellSize) + ')'; });
+
+            // Draw chart label.
+            var chartGLabel = chartG
+                .append('text')
+                .attr('class', 'nv-heatMapChartLabel')
+                .attr('transform', 'translate(0,' + numCellsPerColumn * cellSize / 2 + ')rotate(-90)')
+                .text(function(d, i) { return chartNames[i]; });
+
+            var chartGLabelBB = chartGLabel.node().getBBox();
+            // Use height because the element is rotated -90 degrees.
+            var chartGLabelRB = chartGLabelBB.x + chartGLabelBB.height;
 
             // Draw row labels.
-            var chartGLabel = chartG.selectAll('text.nv-heatMapRowLabel')
+            var chartGRowLabel = chartG.selectAll('text.nv-heatMapRowLabel')
                 .data(rowNames)
                 .enter()
                 .append('text')
                 .attr('class', 'nv-heatMapRowLabel')
-                .attr('transform', function(d, i) { return 'translate(0,' + (cellSize * i + cellSize / 2) + ')'; })
+                .attr('transform', function(d, i) { return 'translate(' + chartGLabelRB + ',' + (cellSize * i + cellSize / 2) + ')'; })
                 .text(function(d) { return d; });
 
             // Container for chart body.
             var chartGBody = chartG
                 .append('g')
                 .attr('class', 'nv-heatMapChartBody')
-                .attr('transform', 'translate(' + (getMaxWidth(chartGLabel) * 1.2) + ',0)');
+                .attr('transform', 'translate(' + (chartGLabelRB + getMaxWidth(chartGRowLabel) + cellSize / 2) + ',0)');
 
             // Draw each cell.
             chartGBody
@@ -110,13 +127,32 @@ nv.models.heatMapHorizontal = function() {
                 .attr('y', function(d) { return cellVerticalIndex(d) * cellSize; })
                 .style('fill', function(d) { return colorScale(data[d] || defaultValue); });
 
-            // Draw each group boundary.
-            chartGBody.selectAll(".nv-heatMapGroup")
+            // Create group.
+            var chartGGroup = chartGBody.selectAll(".nv-heatMapGroup")
                 .data(function(d) { return d3.nest().key(groupDivider).entries(d.values).map(extractValues); })
                 .enter()
+                .append('g')
+                .attr('class', 'nv-heatMapGroup');
+
+            // Draw each group boundary.
+            chartGGroup
                 .append('path')
-                .attr('class', 'nv-heatMapGroup')
+                .attr('class', 'nv-heatMapGroupBoundary')
                 .attr("d", groupPath);
+
+            // The y translation for labels.
+            var chartGGroupLabelY = ((numCellsPerColumn + 1) * cellSize) ;
+
+            // Draw group label.
+            chartGGroup
+                .append('text')
+                .attr('class', 'nv-heatMapGroupLabel')
+                .attr('transform', function() {
+                    // Get the bounding box for the boundary.
+                    var bbox = d3.select(this.parentNode).select('.nv-heatMapGroupBoundary').node().getBBox();
+                    return 'translate(' + bbox.x + ',' + chartGGroupLabelY + ')';
+                })
+                .text(function(d, i) { return groupNames[i]; })
         });
 
         renderWatch.renderEnd('timeHeatMap immediate');
@@ -205,10 +241,22 @@ nv.models.heatMapHorizontal = function() {
             margin.right  = _.right  !== undefined ? _.right  : margin.right;
             margin.bottom = _.bottom !== undefined ? _.bottom : margin.bottom;
             margin.left   = _.left   !== undefined ? _.left   : margin.left;
-        }}
+        }},
+        cellSize: {get: function() { return cellSize; }, set: function(_) { cellSize = _; }},
+        numCellsPerColumn: {get: function() { return numCellsPerColumn; }, set: function(_) { numCellsPerColumn = _; }},
+        rowNames: {get: function() { return rowNames; }, set: function(_) { rowNames = _; }},
+        groupNames: {get: function() { return groupNames; }, set: function(_) { groupNames = _; }},
+        chartNames: {get: function() { return chartNames; }, set: function(_) { chartNames = _; }},
+        cellHorizontalIndex: {get: function() { return cellHorizontalIndex; }, set: function(_) { cellHorizontalIndex = _; }},
+        cellVerticalIndex: {get: function() { return cellVerticalIndex; }, set: function(_) { cellVerticalIndex = _; }},
+        dataDomain: {get: function() { return dataDomain; }, set: function(_) { dataDomain = _; }},
+        defaultValue: {get: function() { return defaultValue; }, set: function(_) { defaultValue = _; }},
+        colorScaleType: {get: function() { return colorScaleType; }, set: function(_) { colorScaleType = _; }},
+        colorRange: {get: function() { return colorRange; }, set: function(_) { colorRange = _; }},
+        chartDivider: {get: function() { return chartDivider; }, set: function(_) { chartDivider = _; }},
+        groupDivider: {get: function() { return groupDivider; }, set: function(_) { groupDivider = _; }},
     });
 
     nv.utils.initOptions(chart);
-
     return chart;
 };

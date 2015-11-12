@@ -3,10 +3,17 @@
     stroke: #ccc;
 }
 
-.nvd3 .nv-heatMapGroup {
+.nvd3 .nv-heatMapChart .nv-heatMapChartLabel {
+    text-align: center;
+}
+
+.nvd3 .nv-heatMapGroup .nv-heatMapGroupBoundary {
     fill: none;
     stroke: #000;
     stroke-width: 2px;
+}
+
+.nvd3 .nv-heatMapGroup .nv-heatMapGroupLabel {
 }
 
 .ndv3 .nv-heatMapCell {
@@ -15,5 +22,4 @@
 }
 
 .nvd3 .nv-heatMapRowLabel {
-    text-anchor: right
 }
