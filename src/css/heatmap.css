@@ -1,0 +1,19 @@
+.nvd3 .nv-heatMapChart {
+    fill: #fff;
+    stroke: #ccc;
+}
+
+.nvd3 .nv-heatMapGroup {
+    fill: none;
+    stroke: #000;
+    stroke-width: 2px;
+}
+
+.ndv3 .nv-heatMapCell {
+    fill: #fff;
+    stroke: #ccc;
+}
+
+.nvd3 .nv-heatMapRowLabel {
+    text-anchor: right
+}
