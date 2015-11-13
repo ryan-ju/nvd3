@@ -16,7 +16,7 @@
 .nvd3 .nv-heatMapGroup .nv-heatMapGroupLabel {
 }
 
-.ndv3 .nv-heatMapCell {
+.nvd3 .nv-heatMapCell {
     fill: #fff;
     stroke: #ccc;
 }
