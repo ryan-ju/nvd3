@@ -9,6 +9,7 @@ nv.models.heatMapHorizontal = function() {
     var margin = {top: 30, right: 20, bottom: 20, left: 20}
         , width = null
         , height = null
+        , autoSize = false
         , noData = null
         , duration = 250
         , dispatch = d3.dispatch('cellEnter', 'cellLeave', 'cellClick', 'chartRemove', 'renderEnd')
@@ -22,10 +23,6 @@ nv.models.heatMapHorizontal = function() {
         , numCellsPerColumn = 12
     // Array.  The size should be equal to numCellsPerColumn.
         , rowNames = d3.range(0, 12).map(function(i) { return 'row' + i; })
-    // Array.  Should be equal to the range of groupDivider.
-        , groupNames = d3.range(0, 10).map(function(i) { return 'group' + i; })
-    // Array.  Should be equal to the range of chartDivider.
-        , chartNames = d3.range(0, 2).map(function(i) { return 'chart' + i; })
     // function(dataItem): Int.  E.g., for a heat map with each cell being a day, cellHorizontalIndex can return the week of the year.
         , cellHorizontalIndex = function(d) { return Math.floor(d / 12) - Math.floor(Math.floor(d / 500) * 500 / 12); }
     // function(dataItem): Int.  E.g., for a heat map with each cell being a day, cellVerticalIndex with range [0..6] makes each column a week.
@@ -40,10 +37,10 @@ nv.models.heatMapHorizontal = function() {
         , colorScaleType = d3.scale.linear()
     // Array.  Color range for the heat map.
         , colorRange = [d3.rgb(255,255,255), d3.rgb(165,0,38)]
-    // function(dataItem): chartName.  Used to divide data into different heat map charts.
-        , chartDivider = function(d) { return Math.floor(d / 500) }
-    // function(dataItem): groupName.  Used to show group boundaries.  If null, then no group boundary will be shown.
-        , groupDivider = function(d) { return Math.floor(d / 100)}
+    // function(dataItem): chartName.  The returned value is used to divide data into charts, and as the chart name.
+        , chartDivider = function(d) { return 'chart' + Math.floor(d / 500); }
+    // function(dataItem): groupName.  The returned value is used to divide data into groups per chart, and as the group name.
+        , groupDivider = function(d) { return 'group' + (Math.floor(d / 100) - Math.floor(d / 500) * 5); }
     // Tooltip when mouse moves over a cell.
         , tooltip = nv.models.tooltip()
     // function(data, index): Unit.  Function to call when cell is clicked.
@@ -68,6 +65,16 @@ nv.models.heatMapHorizontal = function() {
         renderWatch.reset();
 
         chart.selection = selection;
+
+        // Auto adjust the height of selection.
+        if (autoSize) {
+            dispatch.on('renderEnd.resize', function() {
+                var bbox = selection.select('.nv-heatMapHorizontal').node().getBBox();
+                selection
+                    .style('width', bbox.width + margin.left + margin.right)
+                    .style('height', bbox.height + margin.top + margin.bottom);
+            });
+        }
 
         selection.each(function(data) {
             // Create color scale for cells.
@@ -101,6 +108,7 @@ nv.models.heatMapHorizontal = function() {
                 // Leave the correct margin.
                 .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
                 .selectAll('g.nv-heatMapChart')
+                // Each datum is {key: chartKey, values: [v0, v1, ...]}
                 .data(d3.nest().key(chartDivider).entries(dataDomain));
 
             // Each g is a chart.
@@ -117,7 +125,7 @@ nv.models.heatMapHorizontal = function() {
                 .attr('class', 'nv-heatMapChartLabel')
                 // The chart label is rotated 90 degrees anti-clockwise and placed at (0, chart height / 2).
                 .attr('transform', 'translate(0,' + numCellsPerColumn * cellSize / 2 + ')rotate(-90)')
-                .text(function(d, i) { return chartNames[i]; });
+                .text(function(d) { return d.key; });
 
             // Get bounding box for chartGLabel.
             var chartGLabelBB = chartGLabel.node().getBBox();
@@ -158,7 +166,8 @@ nv.models.heatMapHorizontal = function() {
                 // Create group.
                 var chartGGroup = chartGBody.selectAll(".nv-heatMapGroup")
                     .data(function (d) {
-                        return d3.nest().key(groupDivider).entries(d.values).map(extractValues);
+                        // Each datum is {key: groupKey, values: [v0, v1, ...]}.
+                        return d3.nest().key(groupDivider).entries(d.values);
                     })
                     .enter()
                     .append('g')
@@ -168,7 +177,7 @@ nv.models.heatMapHorizontal = function() {
                 chartGGroup
                     .append('path')
                     .attr('class', 'nv-heatMapGroupBoundary')
-                    .attr("d", groupPath);
+                    .attr("d", function(d) { return groupPath(d.values); });
 
                 // The y translation for group labels.
                 var chartGGroupLabelY = ((numCellsPerColumn + 1) * cellSize);
@@ -183,22 +192,20 @@ nv.models.heatMapHorizontal = function() {
                         // The group label is placed below the bottom-left corner of the boundary.
                         return 'translate(' + bbox.x + ',' + chartGGroupLabelY + ')';
                     })
-                    .text(function (d, i) {
-                        return groupNames[i];
-                    })
+                    .text(function (d) { return d.key; });
             }
 
             // Event firing
             chartGBodyCell.on('mouseenter', function(d, i) {
-                dispatch.cellEnter(d, i);
+                dispatch.cellEnter.call(this, d, i);
             });
 
             chartGBodyCell.on('mouseleave', function(d, i) {
-                dispatch.cellLeave(d, i);
+                dispatch.cellLeave.call(this, d, i);
             });
 
             chartGBodyCell.on('click', function(d, i) {
-                dispatch.cellClick(d, i);
+                dispatch.cellClick.call(this, d, i);
             });
 
             // Event handlers
@@ -289,11 +296,17 @@ nv.models.heatMapHorizontal = function() {
         var max = ext[1];
         var x0 = cellHorizontalIndex(min), y0 = cellVerticalIndex(min),
             x1 = cellHorizontalIndex(max), y1 = cellVerticalIndex(max);
-        return 'M' + (x0 + 1) * cellSize + ',' + y0 * cellSize
-            + 'H' + x0 * cellSize + 'V' + numCellsPerColumn * cellSize
-            + 'H' + x1 * cellSize + 'V' + (y1 + 1) * cellSize
-            + 'H' + (x1 + 1) * cellSize + 'V' + 0
-            + 'H' + (x0 + 1) * cellSize + 'Z';
+        if (x1 <= x0) {
+            return 'M' + (x0 + 1) * cellSize + ',' + y0 * cellSize
+                + 'H' + x0 * cellSize + 'V' + (y1 + 1) * cellSize
+                + 'H' + (x1 + 1) * cellSize + 'Z';
+        } else {
+            return 'M' + (x0 + 1) * cellSize + ',' + y0 * cellSize
+                + 'H' + x0 * cellSize + 'V' + numCellsPerColumn * cellSize
+                + 'H' + x1 * cellSize + 'V' + (y1 + 1) * cellSize
+                + 'H' + (x1 + 1) * cellSize + 'V' + 0
+                + 'H' + (x0 + 1) * cellSize + 'Z';
+        }
     }
 
     chart._calls = {
@@ -316,11 +329,14 @@ nv.models.heatMapHorizontal = function() {
     };
 
     chart.options = nv.utils.optionsFunc.bind(chart);
+    chart.dispatch = dispatch;
 
     // use Object get/set functionality to map between vars and chart functions
     chart._options = Object.create({}, {
         // simple options, just get/set the necessary values
         noData:         {get: function(){return noData;},         set: function(_){noData=_;}},
+
+        autoSize: {get: function() { return autoSize; }, set: function(_) { autoSize = _; }},
 
         duration: {get: function(){return duration;}, set: function(_){
             duration = _;
@@ -335,16 +351,17 @@ nv.models.heatMapHorizontal = function() {
         cellSize: {get: function() { return cellSize; }, set: function(_) { cellSize = _; }},
         numCellsPerColumn: {get: function() { return numCellsPerColumn; }, set: function(_) { numCellsPerColumn = _; }},
         rowNames: {get: function() { return rowNames; }, set: function(_) { rowNames = _; }},
-        groupNames: {get: function() { return groupNames; }, set: function(_) { groupNames = _; }},
-        chartNames: {get: function() { return chartNames; }, set: function(_) { chartNames = _; }},
         cellHorizontalIndex: {get: function() { return cellHorizontalIndex; }, set: function(_) { cellHorizontalIndex = _; }},
         cellVerticalIndex: {get: function() { return cellVerticalIndex; }, set: function(_) { cellVerticalIndex = _; }},
         dataDomain: {get: function() { return dataDomain; }, set: function(_) { dataDomain = _; }},
+        dataDomainFormat: {get: function() { return dataDomainFormat; }, set: function(_) { dataDomainFormat = _; }},
         defaultValue: {get: function() { return defaultValue; }, set: function(_) { defaultValue = _; }},
         colorScaleType: {get: function() { return colorScaleType; }, set: function(_) { colorScaleType = _; }},
         colorRange: {get: function() { return colorRange; }, set: function(_) { colorRange = _; }},
         chartDivider: {get: function() { return chartDivider; }, set: function(_) { chartDivider = _; }},
         groupDivider: {get: function() { return groupDivider; }, set: function(_) { groupDivider = _; }},
+        tooltip: {get: function() { return tooltip; }, set: function(_) { tooltip = _; }},
+        cellClick: {get: function() { return cellClick; }, set: function(_) { cellClick = _; }},
     });
 
     nv.utils.initOptions(chart);
